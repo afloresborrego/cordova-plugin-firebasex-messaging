@@ -1,0 +1,33 @@
+{
+  "name": "cordova-plugin-firebasex-messaging",
+  "version": "1.0.0",
+  "description": "Cordova plugin for Firebase Cloud Messaging",
+  "license": "MIT",
+  "keywords": [
+    "cordova",
+    "firebase",
+    "fcm",
+    "messaging",
+    "notifications",
+    "push"
+  ],
+  "cordova": {
+    "id": "cordova-plugin-firebasex-messaging",
+    "platforms": [
+      "android",
+      "ios"
+    ]
+  },
+  "engines": {
+    "cordovaDependencies": {
+      "1.0.0": {
+        "cordova": ">=12",
+        "cordova-android": ">=14",
+        "cordova-ios": ">=7"
+      }
+    }
+  },
+  "dependencies": {
+    "cordova-plugin-firebasex-core": "^1.0.0"
+  }
+}

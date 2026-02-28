@@ -1,0 +1,118 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="cordova-plugin-firebasex-messaging"
+    version="1.0.0"
+    xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <name>cordova-plugin-firebasex-messaging</name>
+    <description>Cordova plugin for Firebase Cloud Messaging</description>
+    <license>MIT</license>
+    <keywords>cordova,firebase,fcm,messaging,notifications,push</keywords>
+
+    <engines>
+        <engine name="cordova" version=">=12" />
+        <engine name="cordova-android" version=">=14" />
+        <engine name="cordova-ios" version=">=7" />
+    </engines>
+
+    <dependency id="cordova-plugin-firebasex-core" />
+
+    <!-- Preferences -->
+    <preference name="FIREBASE_FCM_AUTOINIT_ENABLED" default="true" />
+    <preference name="FIREBASE_MESSAGING_IMMEDIATE_PAYLOAD_DELIVERY" default="false" />
+    <preference name="IOS_FCM_ENABLED" default="true" />
+    <preference name="IOS_ENABLE_CRITICAL_ALERTS_ENABLED" default="false" />
+
+    <!-- JS Module -->
+    <js-module src="www/firebasex-messaging.js" name="FirebasexMessaging">
+        <clobbers target="FirebasexMessaging" />
+    </js-module>
+
+    <!-- Android -->
+    <platform name="android">
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="FirebasexMessagingPlugin">
+                <param name="android-package" value="org.apache.cordova.firebasex.FirebasexMessagingPlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <service android:name="org.apache.cordova.firebasex.FirebasexMessagingService" android:exported="false">
+                <intent-filter>
+                    <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                </intent-filter>
+            </service>
+            <receiver android:name="org.apache.cordova.firebasex.OnNotificationOpenReceiver" android:exported="false" />
+            <activity android:name="org.apache.cordova.firebasex.OnNotificationReceiverActivity"
+                android:exported="false"
+                android:noHistory="true"
+                android:launchMode="singleTask"
+                android:theme="@android:style/Theme.NoDisplay" />
+            <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="@string/default_notification_channel_id" />
+            <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/accent" />
+            <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="$FIREBASE_FCM_AUTOINIT_ENABLED" />
+        </config-file>
+
+        <config-file target="AndroidManifest.xml" parent="/manifest">
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+        </config-file>
+
+        <resource-file src="src/android/cordova-plugin-firebase-strings.xml" target="res/values/cordova-plugin-firebase-strings.xml" />
+
+        <source-file src="src/android/FirebasexMessagingPlugin.java" target-dir="src/org/apache/cordova/firebasex/" />
+        <source-file src="src/android/FirebasexMessagingService.java" target-dir="src/org/apache/cordova/firebasex/" />
+        <source-file src="src/android/OnNotificationOpenReceiver.java" target-dir="src/org/apache/cordova/firebasex/" />
+        <source-file src="src/android/OnNotificationReceiverActivity.java" target-dir="src/org/apache/cordova/firebasex/" />
+
+        <framework src="src/android/build.gradle" custom="true" type="gradleReference" />
+    </platform>
+
+    <!-- iOS -->
+    <platform name="ios">
+        <config-file target="config.xml" parent="/*">
+            <feature name="FirebasexMessagingPlugin">
+                <param name="ios-package" value="FirebasexMessagingPlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+
+        <config-file target="*/Entitlements-Debug.plist" parent="aps-environment">
+            <string>development</string>
+        </config-file>
+
+        <config-file target="*/Entitlements-Release.plist" parent="aps-environment">
+            <string>production</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="UIBackgroundModes">
+            <array>
+                <string>remote-notification</string>
+            </array>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="FIREBASE_MESSAGING_IMMEDIATE_PAYLOAD_DELIVERY">
+            <string>$FIREBASE_MESSAGING_IMMEDIATE_PAYLOAD_DELIVERY</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="FIREBASEX_IOS_FCM_ENABLED">
+            <string>$IOS_FCM_ENABLED</string>
+        </config-file>
+
+        <header-file src="src/ios/FirebasexMessagingPlugin.h" />
+        <source-file src="src/ios/FirebasexMessagingPlugin.m" />
+        <header-file src="src/ios/AppDelegate+FirebasexMessaging.h" />
+        <source-file src="src/ios/AppDelegate+FirebasexMessaging.m" />
+
+        <podspec>
+            <config>
+                <source url="https://cdn.cocoapods.org/" />
+            </config>
+            <pods use-frameworks="true">
+                <pod name="FirebaseMessaging" spec="$IOS_FIREBASE_SDK_VERSION" />
+            </pods>
+        </podspec>
+
+        <preference name="IOS_FIREBASE_SDK_VERSION" default="12.9.0" />
+    </platform>
+</plugin>
