@@ -107,7 +107,7 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
                     }
                 }
             };
-            FirebasexEventBus.registerEventListener("FirebasexAppResumed", lifecycleReceiver, applicationContext);
+            FirebasexEventBus.register(applicationContext, "FirebasexAppResumed", lifecycleReceiver);
 
         } catch (Exception e) {
             FirebasexCorePlugin.getInstance().handleExceptionWithoutContext(e);
@@ -218,7 +218,7 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
     @Override
     public void onDestroy() {
         if (lifecycleReceiver != null) {
-            FirebasexEventBus.unregisterEventListener(lifecycleReceiver, cordova.getActivity().getApplicationContext());
+            FirebasexEventBus.unregister(cordova.getActivity().getApplicationContext(), lifecycleReceiver);
         }
         super.onDestroy();
     }
