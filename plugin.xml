@@ -24,7 +24,7 @@
     <preference name="IOS_ENABLE_CRITICAL_ALERTS_ENABLED" default="false" />
 
     <!-- JS Module -->
-    <js-module src="www/firebasex-messaging.js" name="FirebasexMessaging">
+    <js-module src="www/firebasex-messaging.js" name="FirebasexMessagingPlugin">
         <clobbers target="FirebasexMessaging" />
     </js-module>
 

@@ -74,9 +74,8 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
             Context applicationContext = cordova.getActivity().getApplicationContext();
             Activity cordovaActivity = cordova.getActivity();
 
-            immediateMessagePayloadDelivery = FirebasexCorePlugin.getInstance()
-                    .getPluginVariableFromConfigXml("FIREBASE_MESSAGING_IMMEDIATE_PAYLOAD_DELIVERY")
-                    .equals("true");
+            immediateMessagePayloadDelivery = "true".equals(FirebasexCorePlugin.getInstance()
+                    .getPluginVariableFromConfigXml("FIREBASE_MESSAGING_IMMEDIATE_PAYLOAD_DELIVERY"));
 
             // Check for notification from app launch
             Bundle extras = cordovaActivity.getIntent().getExtras();
