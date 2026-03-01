@@ -43,12 +43,13 @@
                     <action android:name="com.google.firebase.MESSAGING_EVENT" />
                 </intent-filter>
             </service>
-            <receiver android:name="org.apache.cordova.firebasex.OnNotificationOpenReceiver" android:exported="false" />
+            <receiver android:name="org.apache.cordova.firebasex.OnNotificationOpenReceiver" />
             <activity android:name="org.apache.cordova.firebasex.OnNotificationReceiverActivity"
-                android:exported="false"
                 android:noHistory="true"
-                android:launchMode="singleTask"
-                android:theme="@android:style/Theme.NoDisplay" />
+                android:excludeFromRecents="true"
+                android:taskAffinity=""
+                android:theme="@android:style/Theme.Translucent.NoTitleBar"
+                android:exported="true" />
             <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="@string/default_notification_channel_id" />
             <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/accent" />
             <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="$FIREBASE_FCM_AUTOINIT_ENABLED" />

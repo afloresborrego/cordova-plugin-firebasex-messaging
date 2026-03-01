@@ -3,31 +3,32 @@ package org.apache.cordova.firebasex;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.Rect;
-import android.media.AudioAttributes;
+import android.graphics.Bitmap;
+
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
-
 import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
+import android.util.Log;
+import android.app.Notification;
+import android.text.TextUtils;
+import android.text.Html;
+import android.text.Spanned;
+import android.content.ContentResolver;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Paint;
+import android.graphics.Canvas;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
-
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,324 +37,415 @@ import java.net.URL;
 import java.util.Map;
 import java.util.Random;
 
-/**
- * FirebasexMessagingService
- *
- * Handles incoming FCM messages and token refreshes.
- * Adapted from the monolithic FirebasePluginMessagingService.
- */
 public class FirebasexMessagingService extends FirebaseMessagingService {
 
-    private static final String TAG = "FirebasexMsgService";
+    private static final String TAG = "FirebasePlugin";
+
+    static final String defaultSmallIconName = "notification_icon";
+    static final String defaultLargeIconName = "notification_icon_large";
+
+    static final String imageTypeCircle = "circle";
+    static final String imageTypeBigPicture = "big_picture";
 
     @Override
-    public void onNewToken(String token) {
-        super.onNewToken(token);
-        Log.d(TAG, "onNewToken: " + token);
-        FirebasexMessagingPlugin.sendToken(token);
+    public void onNewToken(String refreshedToken) {
+        try{
+            super.onNewToken(refreshedToken);
+            Log.d(TAG, "Refreshed token: " + refreshedToken);
+            FirebasexMessagingPlugin.sendToken(refreshedToken);
+        }catch (Exception e){
+            FirebasexCorePlugin.handleExceptionWithoutContext(e);
+        }
     }
 
-    @Override
-    public void onMessageReceived(RemoteMessage remoteMessage) {
-        Log.d(TAG, "onMessageReceived");
+    private static final int NETWORK_TIMEOUT_MS = 15000;
 
+    public Bitmap getBitmapFromURL(String strURL) {
         try {
-            if (FirebasePluginMessageReceiverManager.onMessageReceived(remoteMessage)) {
-                return;
-            }
-
-            Map<String, String> data = remoteMessage.getData();
-            RemoteMessage.Notification notification = remoteMessage.getNotification();
-
-            boolean hasData = !data.isEmpty();
-            boolean hasNotification = notification != null;
-            String messageType;
-
-            String id = null;
-            String title = null;
-            String body = null;
-            String icon = null;
-            String sound = null;
-            String color = null;
-            String channelId = null;
-            String image = null;
-            String imageType = null;
-            boolean foregroundNotification = false;
-            boolean visibility_show = true;
-            boolean light = true;
-            int lightColor = 0;
-            String vibrate = null;
-            String priority = null;
-
-            if (hasNotification) {
-                messageType = "notification";
-                id = notification.getTag();
-                title = notification.getTitle();
-                body = notification.getBody();
-                icon = notification.getIcon();
-                if (notification.getSound() != null) {
-                    sound = notification.getSound();
-                }
-                color = notification.getColor();
-                channelId = notification.getChannelId();
-                if (notification.getImageUrl() != null) {
-                    image = notification.getImageUrl().toString();
-                }
-            } else {
-                messageType = "data";
-            }
-
-            if (hasData) {
-                if (data.containsKey("notification_title")) title = data.get("notification_title");
-                if (data.containsKey("notification_body")) body = data.get("notification_body");
-                if (data.containsKey("notification_android_icon")) icon = data.get("notification_android_icon");
-                if (data.containsKey("notification_android_sound")) sound = data.get("notification_android_sound");
-                if (data.containsKey("notification_android_color")) color = data.get("notification_android_color");
-                if (data.containsKey("notification_android_channel_id")) channelId = data.get("notification_android_channel_id");
-                if (data.containsKey("notification_android_image")) image = data.get("notification_android_image");
-                if (data.containsKey("notification_android_image_type")) imageType = data.get("notification_android_image_type");
-                if (data.containsKey("notification_android_visibility")) {
-                    String vis = data.get("notification_android_visibility");
-                    if ("secret".equals(vis)) visibility_show = false;
-                }
-                if (data.containsKey("notification_android_light")) {
-                    light = "true".equals(data.get("notification_android_light"));
-                }
-                if (data.containsKey("notification_android_light_color")) {
-                    try {
-                        lightColor = Integer.parseInt(data.get("notification_android_light_color"));
-                    } catch (NumberFormatException ignored) {}
-                }
-                if (data.containsKey("notification_android_vibrate")) vibrate = data.get("notification_android_vibrate");
-                if (data.containsKey("notification_android_priority")) priority = data.get("notification_android_priority");
-                if (data.containsKey("notification_foreground")) {
-                    foregroundNotification = "true".equals(data.get("notification_foreground"));
-                }
-            }
-
-            boolean isEmpty = title == null || title.isEmpty();
-            boolean showNotification = (FirebasexMessagingPlugin.inBackground()
-                    || !FirebasexMessagingPlugin.hasNotificationsCallback()
-                    || foregroundNotification) && (!isEmpty || (body != null && !body.isEmpty()));
-
-            sendMessage(remoteMessage, data, messageType, id, title, body, showNotification,
-                    sound, icon, color, channelId, image, imageType,
-                    foregroundNotification, visibility_show, light, lightColor, vibrate, priority);
-
-        } catch (Exception e) {
-            Log.e(TAG, "Exception in onMessageReceived: " + e.getMessage());
-        }
-    }
-
-    private void sendMessage(RemoteMessage remoteMessage, Map<String, String> data,
-                             String messageType, String id, String title, String body,
-                             boolean showNotification, String sound, String icon, String color,
-                             String channelId, String image, String imageType,
-                             boolean foregroundNotification, boolean visibility_show,
-                             boolean light, int lightColor, String vibrate, String priority) {
-        Bundle bundle = new Bundle();
-        bundle.putString("messageType", messageType);
-
-        for (String key : data.keySet()) {
-            bundle.putString(key, data.get(key));
-        }
-
-        if (id != null) bundle.putString("id", id);
-        if (title != null) bundle.putString("title", title);
-        if (body != null) bundle.putString("body", body);
-        if (remoteMessage.getMessageId() != null) {
-            bundle.putString("google.message_id", remoteMessage.getMessageId());
-        }
-
-        if (showNotification) {
-            displayNotification(bundle, title, body, sound, icon, color, channelId,
-                    image, imageType, visibility_show, light, lightColor, vibrate, priority);
-        }
-
-        String tap = null;
-        if (FirebasexMessagingPlugin.inBackground()) {
-            tap = "background";
-        }
-        bundle.putString("tap", tap);
-
-        FirebasexMessagingPlugin.sendMessage(bundle, getApplicationContext());
-    }
-
-    private void displayNotification(Bundle bundle, String title, String body,
-                                     String sound, String icon, String color,
-                                     String channelId, String image, String imageType,
-                                     boolean visibility_show, boolean light, int lightColor,
-                                     String vibrate, String priority) {
-        try {
-            Context context = getApplicationContext();
-            String packageName = context.getPackageName();
-
-            if (channelId == null || !FirebasexMessagingPlugin.channelExists(channelId)) {
-                channelId = FirebasexMessagingPlugin.defaultChannelId;
-            }
-
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, channelId);
-
-            builder.setContentTitle(title);
-            builder.setContentText(body);
-            builder.setAutoCancel(true);
-
-            // Icon
-            int iconResId = 0;
-            if (icon != null) {
-                iconResId = context.getResources().getIdentifier(icon, "drawable", packageName);
-            }
-            if (iconResId == 0) {
-                iconResId = context.getResources().getIdentifier("notification_icon", "drawable", packageName);
-            }
-            if (iconResId == 0) {
-                iconResId = context.getApplicationInfo().icon;
-            }
-            builder.setSmallIcon(iconResId);
-
-            // Image
-            if (image != null) {
-                Bitmap bitmap = getBitmapFromUrl(image);
-                if (bitmap != null) {
-                    if ("circle".equals(imageType)) {
-                        bitmap = getCircleBitmap(bitmap);
-                        builder.setLargeIcon(bitmap);
-                    } else {
-                        builder.setStyle(new NotificationCompat.BigPictureStyle().bigPicture(bitmap));
-                    }
-                }
-            }
-
-            // Sound
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                if (sound != null) {
-                    if ("default".equals(sound)) {
-                        builder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION));
-                    } else if ("ringtone".equals(sound)) {
-                        builder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
-                    } else {
-                        Uri soundUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + packageName + "/raw/" + sound);
-                        builder.setSound(soundUri);
-                    }
-                } else {
-                    builder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION));
-                }
-            }
-
-            // Lights
-            if (light) {
-                if (lightColor != 0) {
-                    builder.setLights(lightColor, 500, 500);
-                } else {
-                    builder.setDefaults(NotificationCompat.DEFAULT_LIGHTS);
-                }
-            }
-
-            // Vibration
-            if (vibrate != null) {
-                try {
-                    String[] parts = vibrate.split(",");
-                    long[] pattern = new long[parts.length];
-                    for (int i = 0; i < parts.length; i++) {
-                        pattern[i] = Long.parseLong(parts[i].trim());
-                    }
-                    builder.setVibrate(pattern);
-                } catch (Exception ignored) {
-                    builder.setDefaults(NotificationCompat.DEFAULT_VIBRATE);
-                }
-            }
-
-            // Color
-            if (color != null) {
-                try {
-                    builder.setColor(android.graphics.Color.parseColor(color));
-                } catch (Exception ignored) {}
-            }
-
-            // Priority
-            if (priority != null) {
-                switch (priority) {
-                    case "max":
-                        builder.setPriority(NotificationCompat.PRIORITY_MAX);
-                        break;
-                    case "high":
-                        builder.setPriority(NotificationCompat.PRIORITY_HIGH);
-                        break;
-                    case "low":
-                        builder.setPriority(NotificationCompat.PRIORITY_LOW);
-                        break;
-                    case "min":
-                        builder.setPriority(NotificationCompat.PRIORITY_MIN);
-                        break;
-                    default:
-                        builder.setPriority(NotificationCompat.PRIORITY_DEFAULT);
-                        break;
-                }
-            }
-
-            // Visibility
-            if (visibility_show) {
-                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
-            } else {
-                builder.setVisibility(NotificationCompat.VISIBILITY_SECRET);
-            }
-
-            // Click intent
-            Intent intent = new Intent(context, OnNotificationReceiverActivity.class);
-            intent.putExtras(bundle);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-            int requestCode = new Random().nextInt();
-            PendingIntent pendingIntent = PendingIntent.getActivity(context, requestCode, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            builder.setContentIntent(pendingIntent);
-
-            int notificationId;
-            String bundleId = bundle.getString("id");
-            if (bundleId != null) {
-                try {
-                    notificationId = Integer.parseInt(bundleId);
-                } catch (NumberFormatException e) {
-                    notificationId = bundleId.hashCode();
-                }
-            } else {
-                notificationId = new Random().nextInt();
-            }
-
-            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            nm.notify(notificationId, builder.build());
-
-        } catch (Exception e) {
-            Log.e(TAG, "Exception displaying notification: " + e.getMessage());
-        }
-    }
-
-    private Bitmap getBitmapFromUrl(String imageUrl) {
-        try {
-            URL url = new URL(imageUrl);
+            URL url = new URL(strURL);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(NETWORK_TIMEOUT_MS);
+            connection.setReadTimeout(NETWORK_TIMEOUT_MS);
             connection.setDoInput(true);
             connection.connect();
             InputStream input = connection.getInputStream();
             return BitmapFactory.decodeStream(input);
-        } catch (Exception e) {
-            Log.e(TAG, "Error getting bitmap from URL: " + e.getMessage());
+        } catch (IOException e) {
+            e.printStackTrace();
             return null;
         }
     }
 
+    @Override
+    public void onMessageReceived(RemoteMessage remoteMessage) {
+        try{
+            boolean wasHandled = FirebasePluginMessageReceiverManager.onMessageReceived(remoteMessage);
+            if (wasHandled) {
+                Log.d(TAG, "Message was handled by a registered receiver");
+                return;
+            }
+
+            if(FirebasexCorePlugin.applicationContext == null){
+                FirebasexCorePlugin.applicationContext = this.getApplicationContext();
+            }
+
+            String messageType;
+            String title = null;
+            String titleLocKey = null;
+            String[] titleLocArgs = null;
+            String body = null;
+            String bodyLocKey = null;
+            String[] bodyLocArgs = null;
+            String bodyHtml = null;
+            String id = null;
+            String sound = null;
+            String vibrate = null;
+            String light = null;
+            String color = null;
+            String icon = null;
+            String channelId = null;
+            String visibility = null;
+            String priority = null;
+            String image = null;
+            String imageType = null;
+            boolean foregroundNotification = false;
+
+            Map<String, String> data = remoteMessage.getData();
+
+            if (remoteMessage.getNotification() != null) {
+                Log.i(TAG, "Received message: notification");
+                messageType = "notification";
+                id = remoteMessage.getMessageId();
+                RemoteMessage.Notification notification = remoteMessage.getNotification();
+                title = notification.getTitle();
+                titleLocKey = notification.getTitleLocalizationKey();
+                titleLocArgs = notification.getTitleLocalizationArgs();
+                body = notification.getBody();
+                bodyLocKey = notification.getBodyLocalizationKey();
+                bodyLocArgs = notification.getBodyLocalizationArgs();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    channelId = notification.getChannelId();
+                }
+                sound = notification.getSound();
+                color = notification.getColor();
+                icon = notification.getIcon();
+                if (notification.getImageUrl() != null) {
+                    image = notification.getImageUrl().toString();
+                }
+                if (!TextUtils.isEmpty(titleLocKey)) {
+                    int titleId = getResources().getIdentifier(titleLocKey, "string", getPackageName());
+                    title = String.format(getResources().getString(titleId), (Object[])titleLocArgs);
+                }
+                if (!TextUtils.isEmpty(bodyLocKey)) {
+                    int bodyId = getResources().getIdentifier(bodyLocKey, "string", getPackageName());
+                    body = String.format(getResources().getString(bodyId), (Object[])bodyLocArgs);
+                }
+            }else{
+                Log.i(TAG, "Received message: data");
+                messageType = "data";
+            }
+
+            if (data != null) {
+                if(data.containsKey("notification_foreground")){
+                    foregroundNotification = true;
+                }
+                if(data.containsKey("notification_title")) title = data.get("notification_title");
+                if(data.containsKey("notification_body")) body = data.get("notification_body");
+                if(data.containsKey("notification_android_body_html")) bodyHtml = data.get("notification_android_body_html");
+                if(data.containsKey("notification_android_channel_id")) channelId = data.get("notification_android_channel_id");
+                if(data.containsKey("notification_android_id")) id = data.get("notification_android_id");
+                if(data.containsKey("notification_android_sound")) sound = data.get("notification_android_sound");
+                if(data.containsKey("notification_android_vibrate")) vibrate = data.get("notification_android_vibrate");
+                if(data.containsKey("notification_android_light")) light = data.get("notification_android_light");
+                if(data.containsKey("notification_android_color")) color = data.get("notification_android_color");
+                if(data.containsKey("notification_android_icon")) icon = data.get("notification_android_icon");
+                if(data.containsKey("notification_android_visibility")) visibility = data.get("notification_android_visibility");
+                if(data.containsKey("notification_android_priority")) priority = data.get("notification_android_priority");
+                if(data.containsKey("notification_android_image")) image = data.get("notification_android_image");
+                if(data.containsKey("notification_android_image_type")) imageType = data.get("notification_android_image_type");
+            }
+
+            if (TextUtils.isEmpty(id)) {
+                Random rand = new Random();
+                int n = rand.nextInt(50) + 1;
+                id = Integer.toString(n);
+            }
+
+            Log.d(TAG, "From: " + remoteMessage.getFrom());
+            Log.d(TAG, "Id: " + id);
+            Log.d(TAG, "Title: " + title);
+            Log.d(TAG, "Body: " + body);
+            Log.d(TAG, "Sound: " + sound);
+            Log.d(TAG, "Vibrate: " + vibrate);
+            Log.d(TAG, "Light: " + light);
+            Log.d(TAG, "Color: " + color);
+            Log.d(TAG, "Icon: " + icon);
+            Log.d(TAG, "Channel Id: " + channelId);
+            Log.d(TAG, "Visibility: " + visibility);
+            Log.d(TAG, "Priority: " + priority);
+            Log.d(TAG, "Image: " + image);
+            Log.d(TAG, "image Type: " + imageType);
+
+
+            if (!TextUtils.isEmpty(body) || !TextUtils.isEmpty(title) || (data != null && !data.isEmpty())) {
+                boolean showNotification = (FirebasexMessagingPlugin.inBackground() || !FirebasexMessagingPlugin.hasNotificationsCallback() || foregroundNotification) && (!TextUtils.isEmpty(body) || !TextUtils.isEmpty(title));
+                sendMessage(remoteMessage, data, messageType, id, title, body, bodyHtml, showNotification, sound, vibrate, light, color, icon, channelId, priority, visibility, image, imageType);
+            }
+        }catch (Exception e){
+            FirebasexCorePlugin.handleExceptionWithoutContext(e);
+        }
+    }
+
+    private void sendMessage(RemoteMessage remoteMessage, Map<String, String> data, String messageType, String id, String title, String body, String bodyHtml, boolean showNotification, String sound, String vibrate, String light, String color, String icon, String channelId, String priority, String visibility, String image, String imageType) {
+        Log.d(TAG, "sendMessage(): messageType="+messageType+"; showNotification="+showNotification+"; id="+id+"; title="+title+"; body="+body+"; sound="+sound+"; vibrate="+vibrate+"; light="+light+"; color="+color+"; icon="+icon+"; channel="+channelId+"; data="+data.toString());
+        Bundle bundle = new Bundle();
+        for (String key : data.keySet()) {
+            bundle.putString(key, data.get(key));
+        }
+        bundle.putString("messageType", messageType);
+        this.putKVInBundle("id", id, bundle);
+        this.putKVInBundle("title", title, bundle);
+        this.putKVInBundle("body", body, bundle);
+        this.putKVInBundle("body_html", bodyHtml, bundle);
+        this.putKVInBundle("sound", sound, bundle);
+        this.putKVInBundle("vibrate", vibrate, bundle);
+        this.putKVInBundle("light", light, bundle);
+        this.putKVInBundle("color", color, bundle);
+        this.putKVInBundle("icon", icon, bundle);
+        this.putKVInBundle("channel_id", channelId, bundle);
+        this.putKVInBundle("priority", priority, bundle);
+        this.putKVInBundle("visibility", visibility, bundle);
+        this.putKVInBundle("image", image, bundle);
+        this.putKVInBundle("image_type", imageType, bundle);
+        this.putKVInBundle("show_notification", String.valueOf(showNotification), bundle);
+        this.putKVInBundle("from", remoteMessage.getFrom(), bundle);
+        this.putKVInBundle("collapse_key", remoteMessage.getCollapseKey(), bundle);
+        this.putKVInBundle("sent_time", String.valueOf(remoteMessage.getSentTime()), bundle);
+        this.putKVInBundle("ttl", String.valueOf(remoteMessage.getTtl()), bundle);
+
+        if (showNotification) {
+
+            Intent intent;
+            PendingIntent pendingIntent;
+            final int flag = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
+
+            if(getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.S && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                intent = new Intent(this, OnNotificationReceiverActivity.class);
+                intent.putExtras(bundle);
+                pendingIntent = PendingIntent.getActivity(this, id.hashCode(), intent, flag);
+            }else{
+                intent = new Intent(this, OnNotificationOpenReceiver.class);
+                intent.putExtras(bundle);
+                pendingIntent = PendingIntent.getBroadcast(this, id.hashCode(), intent, flag);
+            }
+
+
+            // Channel
+            if(channelId == null || !FirebasexMessagingPlugin.channelExists(channelId)){
+                channelId = FirebasexMessagingPlugin.defaultChannelId;
+            }
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+                Log.d(TAG, "Channel ID: "+channelId);
+            }
+
+
+            NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, channelId);
+            notificationBuilder
+                    .setContentTitle(title)
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent);
+
+            if(bodyHtml != null) {
+                notificationBuilder
+                    .setContentText(fromHtml(body))
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(fromHtml(body)));
+            }else{
+                notificationBuilder
+                    .setContentText(body)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(body));
+            }
+
+
+            // On Android O+ the sound/lights/vibration are determined by the channel ID
+            if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O){
+                // Sound
+                if (sound == null) {
+                    Log.d(TAG, "Sound: none");
+                }else if (sound.equals("default")) {
+                    notificationBuilder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION));
+                    Log.d(TAG, "Sound: default");
+                }else{
+                    Uri soundPath = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getPackageName() + "/raw/" + sound);
+                    Log.d(TAG, "Sound: custom=" + sound+"; path="+soundPath.toString());
+                    notificationBuilder.setSound(soundPath);
+                }
+
+                // Light
+                if (light != null) {
+                    try {
+                        String[] lightsComponents = color.replaceAll("\\s", "").split(",");
+                        if (lightsComponents.length == 3) {
+                            int lightArgb = Color.parseColor(lightsComponents[0]);
+                            int lightOnMs = Integer.parseInt(lightsComponents[1]);
+                            int lightOffMs = Integer.parseInt(lightsComponents[2]);
+                            notificationBuilder.setLights(lightArgb, lightOnMs, lightOffMs);
+                            Log.d(TAG, "Lights: color="+lightsComponents[0]+"; on(ms)="+lightsComponents[2]+"; off(ms)="+lightsComponents[3]);
+                        }
+
+                    } catch (Exception e) {}
+                }
+
+                // Vibrate
+                if (vibrate != null){
+                    try {
+                        String[] sVibrations = vibrate.replaceAll("\\s", "").split(",");
+                        long[] lVibrations = new long[sVibrations.length];
+                        int i=0;
+                        for(String sVibration: sVibrations){
+                            lVibrations[i] = Integer.parseInt(sVibration.trim());
+                            i++;
+                        }
+                        notificationBuilder.setVibrate(lVibrations);
+                        Log.d(TAG, "Vibrate: "+vibrate);
+                    } catch (Exception e) {
+                        Log.e(TAG, e.getMessage());
+                    }
+                }
+            }
+
+
+            // Icon
+            int defaultSmallIconResID = getResources().getIdentifier(defaultSmallIconName, "drawable", getPackageName());
+            int customSmallIconResID = 0;
+            if(icon != null){
+                customSmallIconResID = getResources().getIdentifier(icon, "drawable", getPackageName());
+            }
+
+            if (customSmallIconResID != 0) {
+                notificationBuilder.setSmallIcon(customSmallIconResID);
+                Log.d(TAG, "Small icon: custom="+icon);
+            }else if (defaultSmallIconResID != 0) {
+                Log.d(TAG, "Small icon: default="+defaultSmallIconName);
+                notificationBuilder.setSmallIcon(defaultSmallIconResID);
+            } else {
+                Log.d(TAG, "Small icon: application");
+                notificationBuilder.setSmallIcon(getApplicationInfo().icon);
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                int defaultLargeIconResID = getResources().getIdentifier(defaultLargeIconName, "drawable", getPackageName());
+                int customLargeIconResID = 0;
+                if(icon != null){
+                    customLargeIconResID = getResources().getIdentifier(icon+"_large", "drawable", getPackageName());
+                }
+
+                int largeIconResID;
+                if (customLargeIconResID != 0 || defaultLargeIconResID != 0) {
+                    if (customLargeIconResID != 0) {
+                        largeIconResID = customLargeIconResID;
+                        Log.d(TAG, "Large icon: custom="+icon);
+                    }else{
+                        Log.d(TAG, "Large icon: default="+defaultLargeIconName);
+                        largeIconResID = defaultLargeIconResID;
+                    }
+                    notificationBuilder.setLargeIcon(BitmapFactory.decodeResource(getApplicationContext().getResources(), largeIconResID));
+                }
+            }
+
+            // Image
+            if (image != null) {
+                Log.d(TAG, "Large icon: image="+image);
+                Bitmap bitmap = getBitmapFromURL(image);
+                if(bitmap != null) {
+                    if(imageTypeCircle.equalsIgnoreCase(imageType)) {
+                        bitmap = getCircleBitmap(bitmap);
+                    }
+                    else if(imageTypeBigPicture.equalsIgnoreCase(imageType)) {
+                        notificationBuilder.setStyle(new NotificationCompat.BigPictureStyle().bigPicture(bitmap).bigLargeIcon((Bitmap) null));
+                    }
+                    notificationBuilder.setLargeIcon(bitmap);
+                }
+            }
+
+            // Color
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                int defaultColor = getResources().getColor(getResources().getIdentifier("accent", "color", getPackageName()), null);
+                if(color != null){
+                    notificationBuilder.setColor(Color.parseColor(color));
+                    Log.d(TAG, "Color: custom="+color);
+                }else{
+                    Log.d(TAG, "Color: default");
+                    notificationBuilder.setColor(defaultColor);
+                }
+            }
+
+            // Visibility
+            int iVisibility = NotificationCompat.VISIBILITY_PUBLIC;
+            if(visibility != null){
+                iVisibility = Integer.parseInt(visibility);
+            }
+            Log.d(TAG, "Visibility: " + iVisibility);
+            notificationBuilder.setVisibility(iVisibility);
+
+            // Priority
+            int iPriority = NotificationCompat.PRIORITY_MAX;
+            if(priority != null){
+                iPriority = Integer.parseInt(priority);
+            }
+            Log.d(TAG, "Priority: " + iPriority);
+            notificationBuilder.setPriority(iPriority);
+
+            // Build notification
+            Notification notification = notificationBuilder.build();
+
+            // Display notification
+            NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            Log.d(TAG, "show notification: "+notification.toString());
+            notificationManager.notify(id.hashCode(), notification);
+        }
+        // Send to plugin
+        FirebasexMessagingPlugin.sendMessage(bundle, this.getApplicationContext());
+    }
+
     private Bitmap getCircleBitmap(Bitmap bitmap) {
-        int size = Math.min(bitmap.getWidth(), bitmap.getHeight());
-        Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(output);
-        Paint paint = new Paint();
-        Rect rect = new Rect(0, 0, size, size);
+
+        if (bitmap == null) {
+            return null;
+        }
+
+        final Bitmap output = Bitmap.createBitmap(bitmap.getWidth(), bitmap.getHeight(), Bitmap.Config.ARGB_8888);
+        final Canvas canvas = new Canvas(output);
+        final int color = Color.RED;
+        final Paint paint = new Paint();
+        final Rect rect = new Rect(0, 0, bitmap.getWidth(), bitmap.getHeight());
+        final RectF rectF = new RectF(rect);
 
         paint.setAntiAlias(true);
         canvas.drawARGB(0, 0, 0, 0);
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint);
+        paint.setColor(color);
+        float cx = bitmap.getWidth() / 2;
+        float cy = bitmap.getHeight() / 2;
+        float radius = cx < cy ? cx : cy;
+        canvas.drawCircle(cx, cy, radius, paint);
+
         paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
         canvas.drawBitmap(bitmap, rect, rect, paint);
+
+        bitmap.recycle();
+
         return output;
+    }
+
+    private Spanned fromHtml(String source) {
+        if (source != null)
+            return Html.fromHtml(source);
+        else
+            return null;
+    }
+
+    private void putKVInBundle(String k, String v, Bundle b){
+        if(v != null && !b.containsKey(k)){
+            b.putString(k, v);
+        }
     }
 }

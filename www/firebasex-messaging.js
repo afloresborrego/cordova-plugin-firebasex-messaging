@@ -2,6 +2,18 @@ var exec = require('cordova/exec');
 
 var SERVICE = 'FirebasexMessagingPlugin';
 
+function ensureBoolean(value) {
+    if (value === "true" || value === true) return true;
+    if (value === "false" || value === false) return false;
+    return !!value;
+}
+
+function ensureBooleanFn(fn) {
+    return function (value) {
+        return fn(ensureBoolean(value));
+    };
+}
+
 // Token management
 exports.getToken = function (success, error) {
     exec(success, error, SERVICE, 'getToken', []);
@@ -43,19 +55,19 @@ exports.unregister = function (success, error) {
 
 // Permissions
 exports.hasPermission = function (success, error) {
-    exec(success, error, SERVICE, 'hasPermission', []);
+    exec(ensureBooleanFn(success), error, SERVICE, 'hasPermission', []);
 };
 
 exports.grantPermission = function (success, error, requestWithProvidesAppNotificationSettings) {
-    exec(success, error, SERVICE, 'grantPermission', [requestWithProvidesAppNotificationSettings || false]);
+    exec(ensureBooleanFn(success), error, SERVICE, 'grantPermission', [ensureBoolean(requestWithProvidesAppNotificationSettings)]);
 };
 
 exports.hasCriticalPermission = function (success, error) {
-    exec(success, error, SERVICE, 'hasCriticalPermission', []);
+    exec(ensureBooleanFn(success), error, SERVICE, 'hasCriticalPermission', []);
 };
 
 exports.grantCriticalPermission = function (success, error) {
-    exec(success, error, SERVICE, 'grantCriticalPermission', []);
+    exec(ensureBooleanFn(success), error, SERVICE, 'grantCriticalPermission', []);
 };
 
 // Auto-init
@@ -64,7 +76,7 @@ exports.isAutoInitEnabled = function (success, error) {
 };
 
 exports.setAutoInitEnabled = function (enabled, success, error) {
-    exec(success, error, SERVICE, 'setAutoInitEnabled', [enabled]);
+    exec(success, error, SERVICE, 'setAutoInitEnabled', [!!enabled]);
 };
 
 // Badge

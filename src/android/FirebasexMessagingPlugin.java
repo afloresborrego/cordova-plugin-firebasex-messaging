@@ -101,12 +101,12 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
                 @Override
                 public void onReceive(Context context, Intent intent) {
                     String action = intent.getAction();
-                    if ("FirebasexAppResumed".equals(action)) {
+                    if ("FirebasexAppDidBecomeActive".equals(action)) {
                         sendPendingNotifications();
                     }
                 }
             };
-            FirebasexEventBus.register(applicationContext, "FirebasexAppResumed", lifecycleReceiver);
+            FirebasexEventBus.register(applicationContext, "FirebasexAppDidBecomeActive", lifecycleReceiver);
 
         } catch (Exception e) {
             FirebasexCorePlugin.getInstance().handleExceptionWithoutContext(e);
@@ -201,16 +201,17 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     @Override
     public void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
         try {
-            Bundle data = intent.getExtras();
+            super.onNewIntent(intent);
+            final Bundle data = intent.getExtras();
             if (data != null && data.containsKey("google.message_id")) {
                 data.putString("messageType", "notification");
                 data.putString("tap", "background");
-                sendMessage(data, cordova.getActivity().getApplicationContext());
+                Log.d(TAG, "Notification message on new intent: " + data.toString());
+                sendMessage(data, FirebasexCorePlugin.getApplicationContext());
             }
         } catch (Exception e) {
-            FirebasexCorePlugin.getInstance().handleExceptionWithoutContext(e);
+            FirebasexCorePlugin.handleExceptionWithoutContext(e);
         }
     }
 
@@ -252,6 +253,34 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     private void onTokenRefresh(final CallbackContext callbackContext) {
         tokenRefreshCallbackContext = callbackContext;
+
+        cordova.getThreadPool().execute(new Runnable() {
+            public void run() {
+                try {
+                    FirebaseMessaging.getInstance().getToken().addOnCompleteListener(new com.google.android.gms.tasks.OnCompleteListener<String>() {
+                        @Override
+                        public void onComplete(com.google.android.gms.tasks.Task<String> task) {
+                            try {
+                                if (task.isSuccessful() || task.getException() == null) {
+                                    String currentToken = task.getResult();
+                                    if (currentToken != null) {
+                                        sendToken(currentToken);
+                                    }
+                                } else if (task.getException() != null) {
+                                    callbackContext.error(task.getException().getMessage());
+                                } else {
+                                    callbackContext.error("Task failed for unknown reason");
+                                }
+                            } catch (Exception e) {
+                                FirebasexCorePlugin.handleExceptionWithContext(e, callbackContext);
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    FirebasexCorePlugin.handleExceptionWithContext(e, callbackContext);
+                }
+            }
+        });
     }
 
     private void onMessageReceived(final CallbackContext callbackContext) {
@@ -412,29 +441,40 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
             String packageName = FirebasexCorePlugin.getInstance().getCordovaActivity().getPackageName();
 
             String name = options.optString("name", "");
+            Log.d(TAG, "Channel " + id + " - name=" + name);
+
             int importance = options.optInt("importance", NotificationManager.IMPORTANCE_HIGH);
+            Log.d(TAG, "Channel " + id + " - importance=" + importance);
 
             channel = new NotificationChannel(id, name, importance);
 
             String description = options.optString("description", "");
+            Log.d(TAG, "Channel " + id + " - description=" + description);
             channel.setDescription(description);
 
             boolean light = options.optBoolean("light", true);
+            Log.d(TAG, "Channel " + id + " - light=" + light);
             channel.enableLights(light);
 
             int lightColor = options.optInt("lightColor", -1);
             if (lightColor != -1) {
+                Log.d(TAG, "Channel " + id + " - lightColor=" + lightColor);
                 channel.setLightColor(lightColor);
             }
 
             int visibility = options.optInt("visibility", NotificationCompat.VISIBILITY_PUBLIC);
+            Log.d(TAG, "Channel " + id + " - visibility=" + visibility);
             channel.setLockscreenVisibility(visibility);
 
             boolean badge = options.optBoolean("badge", true);
+            Log.d(TAG, "Channel " + id + " - badge=" + badge);
             channel.setShowBadge(badge);
 
             int usage = options.optInt("usage", AudioAttributes.USAGE_NOTIFICATION_RINGTONE);
+            Log.d(TAG, "Channel " + id + " - usage=" + usage);
+
             int streamType = options.optInt("streamType", -1);
+            Log.d(TAG, "Channel " + id + " - streamType=" + streamType);
 
             String sound = options.optString("sound", "default");
             AudioAttributes.Builder audioAttributesBuilder = new AudioAttributes.Builder()
@@ -448,15 +488,19 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
             AudioAttributes audioAttributes = audioAttributesBuilder.build();
             if ("ringtone".equals(sound)) {
                 channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), audioAttributes);
+                Log.d(TAG, "Channel " + id + " - sound=ringtone");
             } else if (!sound.contentEquals("false")) {
                 if (!sound.contentEquals("default")) {
                     Uri soundUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + packageName + "/raw/" + sound);
                     channel.setSound(soundUri, audioAttributes);
+                    Log.d(TAG, "Channel " + id + " - sound=" + sound);
                 } else {
                     channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), audioAttributes);
+                    Log.d(TAG, "Channel " + id + " - sound=default");
                 }
             } else {
                 channel.setSound(null, null);
+                Log.d(TAG, "Channel " + id + " - sound=none");
             }
 
             JSONArray pattern = options.optJSONArray("vibration");
@@ -468,9 +512,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
                 }
                 channel.enableVibration(true);
                 channel.setVibrationPattern(patternArray);
+                Log.d(TAG, "Channel " + id + " - vibrate=" + pattern);
             } else {
                 boolean vibrate = options.optBoolean("vibration", true);
                 channel.enableVibration(vibrate);
+                Log.d(TAG, "Channel " + id + " - vibrate=" + vibrate);
             }
 
             nm.createNotificationChannel(channel);
@@ -617,26 +663,36 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
      * to the JS callback.
      */
     public static void sendMessage(Bundle bundle, Context context) {
-        try {
-            if (!FirebasePluginMessageReceiverManager.sendMessage(bundle)) {
-                if (notificationCallbackContext != null && (!inBackground() || immediateMessagePayloadDelivery)) {
-                    JSONObject json = new JSONObject();
-                    for (String key : bundle.keySet()) {
-                        Object value = bundle.get(key);
-                        json.put(key, value);
-                    }
-                    PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, json);
-                    pluginResult.setKeepCallback(true);
-                    notificationCallbackContext.sendPluginResult(pluginResult);
-                } else {
-                    if (notificationStack == null) {
-                        notificationStack = new ArrayList<Bundle>();
-                    }
-                    notificationStack.add(bundle);
-                }
+        if (!hasNotificationsCallback() || (inBackground() && !immediateMessagePayloadDelivery)) {
+            if (notificationStack == null) {
+                notificationStack = new ArrayList<Bundle>();
             }
-        } catch (Exception e) {
-            FirebasexCorePlugin.getInstance().handleExceptionWithoutContext(e);
+            notificationStack.add(bundle);
+
+            return;
+        }
+
+        final CallbackContext callbackContext = notificationCallbackContext;
+        if (bundle != null) {
+            // Pass the message bundle to the receiver manager so any registered receivers can decide to handle it
+            boolean wasHandled = FirebasePluginMessageReceiverManager.sendMessage(bundle);
+            if (wasHandled) {
+                Log.d(TAG, "Message bundle was handled by a registered receiver");
+            } else if (callbackContext != null) {
+                JSONObject json = new JSONObject();
+                java.util.Set<String> keys = bundle.keySet();
+                for (String key : keys) {
+                    try {
+                        json.put(key, bundle.get(key));
+                    } catch (JSONException e) {
+                        FirebasexCorePlugin.handleExceptionWithContext(e, callbackContext);
+                        return;
+                    }
+                }
+                PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, json);
+                pluginResult.setKeepCallback(true);
+                callbackContext.sendPluginResult(pluginResult);
+            }
         }
     }
 
@@ -658,12 +714,20 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
     /**
      * Sends any queued notifications to the JS layer.
      */
-    public void sendPendingNotifications() {
-        if (notificationCallbackContext != null && notificationStack != null) {
-            for (Bundle bundle : notificationStack) {
-                sendMessage(bundle, cordova.getActivity().getApplicationContext());
-            }
-            notificationStack.clear();
+    private synchronized void sendPendingNotifications() {
+        if (notificationStack != null) {
+            this.cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    try {
+                        for (Bundle bundle : notificationStack) {
+                            sendMessage(bundle, FirebasexCorePlugin.getApplicationContext());
+                        }
+                        notificationStack.clear();
+                    } catch (Exception e) {
+                        FirebasexCorePlugin.handleExceptionWithoutContext(e);
+                    }
+                }
+            });
         }
     }
 }

@@ -45,6 +45,12 @@ static BOOL immediateMessagePayloadDelivery = NO;
         // Set actionable categories if pn-actions.json exist in bundle
         [self setActionableNotifications];
 
+        // Flush pending notifications when app returns to foreground
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(onAppDidBecomeActive)
+                                                     name:FirebasexAppDidBecomeActive
+                                                   object:nil];
+
         // Check for permission and register for remote notifications if granted
         if (self.isFCMEnabled) {
             [self _hasPermission:^(BOOL result) {
@@ -53,6 +59,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     } @catch (NSException *exception) {
         [[FirebasexCorePlugin sharedInstance] handlePluginExceptionWithoutContext:exception];
     }
+}
+
+- (void)onAppDidBecomeActive {
+    [self sendPendingNotifications];
 }
 
 // Dynamic actions from pn-actions.json
