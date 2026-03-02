@@ -1,3 +1,13 @@
+/**
+ * @file AppDelegate+FirebasexMessaging.m
+ * @brief AppDelegate category implementation for Firebase Cloud Messaging.
+ *
+ * Hooks into the Core plugin’s FirebasexAppDidFinishLaunching notification to
+ * register as the UNUserNotificationCenter and FIRMessaging delegate. Handles
+ * remote notification delivery, foreground notification display via local
+ * notifications, notification tap responses with actionable notification support,
+ * and notification settings deep-link callbacks.
+ */
 #import "AppDelegate+FirebasexMessaging.h"
 #import "FirebasexMessagingPlugin.h"
 #import "FirebasexCorePlugin.h"
@@ -6,17 +16,28 @@
 @import UserNotifications;
 @import FirebaseMessaging;
 
+/** NSNotification name posted when an FCM registration token is received. */
 NSString *const FirebasexFCMTokenReceived = @"FirebasexFCMTokenReceived";
+/** NSNotification name posted when an APNs device token is received. */
 NSString *const FirebasexAPNSTokenReceived = @"FirebasexAPNSTokenReceived";
+/** NSNotification name posted when a remote notification is received. */
 NSString *const FirebasexNotificationReceived = @"FirebasexNotificationReceived";
+/** NSNotification name posted when a notification is tapped by the user. */
 NSString *const FirebasexNotificationTapped = @"FirebasexNotificationTapped";
+/** NSNotification name posted when the user opens notification settings (iOS 12+). */
 NSString *const FirebasexNotificationSettings = @"FirebasexNotificationSettings";
 
+/** Weak reference to the previous UNUserNotificationCenter delegate, preserved for forwarding. */
 static __weak id<UNUserNotificationCenterDelegate> _prevUserNotificationCenterDelegate = nil;
+/** Temporary mutable copy of notification userInfo for processing. */
 static NSDictionary *mutableUserInfo;
 
 @implementation AppDelegate (FirebasexMessaging)
 
+/**
+ * Registers an observer for Core’s FirebasexAppDidFinishLaunching notification
+ * to perform messaging setup after Firebase has been configured.
+ */
 + (void)load {
     // Observe core's FirebasexAppDidFinishLaunching to register delegates
     [[NSNotificationCenter defaultCenter] addObserverForName:FirebasexAppDidFinishLaunching
@@ -28,6 +49,11 @@ static NSDictionary *mutableUserInfo;
     }];
 }
 
+/**
+ * Configures FCM delegates: sets UNUserNotificationCenter.delegate and
+ * FIRMessaging.delegate if FCM is enabled; disables auto-init otherwise.
+ * Preserves any previously set UNUserNotificationCenterDelegate for forwarding.
+ */
 - (void)firebasexMessagingSetup {
     @try {
         if ([self firebasexMessagingIsFCMEnabled]) {
@@ -42,12 +68,20 @@ static NSDictionary *mutableUserInfo;
     }
 }
 
+/**
+ * Checks whether FCM is enabled based on the plugin instance’s isFCMEnabled property.
+ * @return YES if FCM is enabled (defaults to YES if the plugin hasn’t initialised yet).
+ */
 - (BOOL)firebasexMessagingIsFCMEnabled {
     return [FirebasexMessagingPlugin instance] != nil ? [FirebasexMessagingPlugin instance].isFCMEnabled : YES;
 }
 
 #pragma mark - FIRMessagingDelegate
 
+/**
+ * FIRMessagingDelegate callback: invoked when the FCM registration token is
+ * received or refreshed. Forwards the token to the plugin for JS delivery.
+ */
 - (void)messaging:(FIRMessaging *)messaging didReceiveRegistrationToken:(NSString *)fcmToken {
     @try {
         [[FirebasexCorePlugin sharedInstance] _logMessage:[NSString stringWithFormat:@"didReceiveRegistrationToken: %@", fcmToken]];
@@ -57,6 +91,10 @@ static NSDictionary *mutableUserInfo;
     }
 }
 
+/**
+ * Called when the app successfully registers with APNs. Passes the device
+ * token to FIRMessaging and notifies the plugin.
+ */
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
     if (![self firebasexMessagingIsFCMEnabled]) return;
 
@@ -65,6 +103,7 @@ static NSDictionary *mutableUserInfo;
     [[FirebasexMessagingPlugin instance] sendApnsToken:[[FirebasexMessagingPlugin instance] getAPNSToken]];
 }
 
+/** Logs APNs registration failure. */
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
     if (![self firebasexMessagingIsFCMEnabled]) return;
     [[FirebasexCorePlugin sharedInstance] _logError:[NSString stringWithFormat:@"didFailToRegisterForRemoteNotificationsWithError: %@", error.description]];
@@ -72,6 +111,15 @@ static NSDictionary *mutableUserInfo;
 
 #pragma mark - Remote Notifications
 
+/**
+ * Handles incoming remote notifications in both foreground and background.
+ *
+ * Determines the message type (notification vs data) based on APS alert presence,
+ * sets the tap source for background notifications, and optionally shows a local
+ * foreground notification if the message contains notification_foreground flag.
+ * Content-available silent notifications in the background are handled specially
+ * to avoid duplicate display.
+ */
 - (void)application:(UIApplication *)application
     didReceiveRemoteNotification:(NSDictionary *)userInfo
           fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
@@ -113,6 +161,15 @@ static NSDictionary *mutableUserInfo;
     }
 }
 
+/**
+ * Processes a foreground notification message and displays it as a local notification.
+ *
+ * Checks for the notification_foreground flag, extracts title/body/sound/badge
+ * from both APS and data payload keys (data keys take precedence), and creates
+ * a UNNotificationRequest to display the notification while the app is foregrounded.
+ *
+ * @param messageData The notification message dictionary.
+ */
 - (void)firebasexMessagingProcessMessageForForegroundNotification:(NSDictionary *)messageData {
     bool showForegroundNotification = [messageData objectForKey:@"notification_foreground"];
     if (!showForegroundNotification) return;
@@ -198,6 +255,11 @@ static NSDictionary *mutableUserInfo;
 
 #pragma mark - UNUserNotificationCenterDelegate
 
+/**
+ * Called when the user taps the notification settings button in system notification
+ * settings (iOS 12+, requires UNAuthorizationOptionProvidesAppNotificationSettings).
+ * Forwards the event to the plugin for JS delivery.
+ */
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
     openSettingsForNotification:(UNNotification *)notification {
     @try {
@@ -207,6 +269,14 @@ static NSDictionary *mutableUserInfo;
     }
 }
 
+/**
+ * Called when a notification is about to be presented while the app is in the foreground.
+ *
+ * For push/time-interval notifications, determines whether to show the notification
+ * based on the notification_foreground flag and content-available status.
+ * Forwards the notification payload to the plugin for JS delivery.
+ * For other trigger types, delegates to the previous UNUserNotificationCenterDelegate.
+ */
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
        willPresentNotification:(UNNotification *)notification
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {
@@ -262,6 +332,14 @@ static NSDictionary *mutableUserInfo;
     }
 }
 
+/**
+ * Called when the user taps a notification or selects an actionable notification action.
+ *
+ * For push/time-interval notifications, sets the tap source ("background" or "foreground"),
+ * extracts any action identifier for actionable notifications, and forwards the
+ * notification data to the plugin for JS delivery.
+ * For other trigger types, delegates to the previous UNUserNotificationCenterDelegate.
+ */
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
     didReceiveNotificationResponse:(UNNotificationResponse *)response
              withCompletionHandler:(void (^)(void))completionHandler {
@@ -308,6 +386,12 @@ static NSDictionary *mutableUserInfo;
 
 #pragma mark - Helpers
 
+/**
+ * Checks whether the APS payload indicates content-available (silent background fetch).
+ * Handles both quoted and unquoted key variants.
+ * @param userInfo The notification payload dictionary.
+ * @return YES if content-available is set to 1.
+ */
 - (bool)firebasexMessagingIsContentAvailable:(NSDictionary *)userInfo {
     if (userInfo == nil) return false;
     NSDictionary *aps = [userInfo objectForKey:@"aps"];

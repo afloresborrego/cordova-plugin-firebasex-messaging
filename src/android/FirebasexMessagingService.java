@@ -37,16 +37,35 @@ import java.net.URL;
 import java.util.Map;
 import java.util.Random;
 
+/**
+ * Firebase Cloud Messaging service that handles incoming push notifications and FCM token refreshes.
+ *
+ * <p>Processes both notification and data messages from Firebase, builds and displays
+ * Android system notifications with full customisation support (sound, vibration, lights,
+ * icons, images, colour, visibility, priority, channels), and forwards message payloads
+ * to {@link FirebasexMessagingPlugin} for delivery to the JavaScript layer.</p>
+ *
+ * @see FirebasexMessagingPlugin
+ */
 public class FirebasexMessagingService extends FirebaseMessagingService {
 
     private static final String TAG = "FirebasePlugin";
 
+    /** Default drawable resource name for the small notification icon. */
     static final String defaultSmallIconName = "notification_icon";
+    /** Default drawable resource name for the large notification icon. */
     static final String defaultLargeIconName = "notification_icon_large";
 
+    /** Image type constant: render the notification image as a circle. */
     static final String imageTypeCircle = "circle";
+    /** Image type constant: render the notification image as a big picture. */
     static final String imageTypeBigPicture = "big_picture";
 
+    /**
+     * Called when the FCM token is refreshed. Forwards the new token to
+     * {@link FirebasexMessagingPlugin#sendToken(String)} for delivery to JavaScript.
+     * @param refreshedToken The new FCM registration token.
+     */
     @Override
     public void onNewToken(String refreshedToken) {
         try{
@@ -58,8 +77,14 @@ public class FirebasexMessagingService extends FirebaseMessagingService {
         }
     }
 
+    /** Network timeout in milliseconds for downloading notification images. */
     private static final int NETWORK_TIMEOUT_MS = 15000;
 
+    /**
+     * Downloads a bitmap from the given URL with a connection timeout.
+     * @param strURL The URL of the image to download.
+     * @return The downloaded {@link Bitmap}, or null on failure.
+     */
     public Bitmap getBitmapFromURL(String strURL) {
         try {
             URL url = new URL(strURL);
@@ -76,6 +101,26 @@ public class FirebasexMessagingService extends FirebaseMessagingService {
         }
     }
 
+    /**
+     * Called when a push message is received from FCM.
+     *
+     * <p>Extracts notification attributes from both the {@code RemoteMessage.Notification}
+     * payload and data payload keys. Data payload keys take precedence and support
+     * Android-specific overrides prefixed with {@code notification_android_}:</p>
+     * <ul>
+     *   <li>{@code notification_title}, {@code notification_body} — basic content</li>
+     *   <li>{@code notification_android_body_html} — HTML-formatted body</li>
+     *   <li>{@code notification_android_channel_id} — notification channel ID</li>
+     *   <li>{@code notification_android_sound}, {@code notification_android_vibrate},
+     *       {@code notification_android_light} — alert properties</li>
+     *   <li>{@code notification_android_color}, {@code notification_android_icon} — appearance</li>
+     *   <li>{@code notification_android_visibility}, {@code notification_android_priority} — display options</li>
+     *   <li>{@code notification_android_image}, {@code notification_android_image_type} — image display</li>
+     *   <li>{@code notification_foreground} — force display while app is in foreground</li>
+     * </ul>
+     *
+     * @param remoteMessage The received FCM message.
+     */
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
         try{
@@ -196,6 +241,16 @@ public class FirebasexMessagingService extends FirebaseMessagingService {
         }
     }
 
+    /**
+     * Builds a notification Bundle from the message data and optionally displays
+     * a system notification. The Bundle is always forwarded to
+     * {@link FirebasexMessagingPlugin#sendMessage(Bundle, Context)} for JS delivery.
+     *
+     * <p>When {@code showNotification} is true, constructs a full Android notification
+     * with custom sound, vibration, lights, icons (small/large), images (circle or
+     * big picture), colour, visibility, and priority. On Android O+, sound/lights/vibration
+     * are determined by the notification channel.</p>
+     */
     private void sendMessage(RemoteMessage remoteMessage, Map<String, String> data, String messageType, String id, String title, String body, String bodyHtml, boolean showNotification, String sound, String vibrate, String light, String color, String icon, String channelId, String priority, String visibility, String image, String imageType) {
         Log.d(TAG, "sendMessage(): messageType="+messageType+"; showNotification="+showNotification+"; id="+id+"; title="+title+"; body="+body+"; sound="+sound+"; vibrate="+vibrate+"; light="+light+"; color="+color+"; icon="+icon+"; channel="+channelId+"; data="+data.toString());
         Bundle bundle = new Bundle();
@@ -407,6 +462,11 @@ public class FirebasexMessagingService extends FirebaseMessagingService {
         FirebasexMessagingPlugin.sendMessage(bundle, this.getApplicationContext());
     }
 
+    /**
+     * Crops a bitmap into a circular shape for notification display.
+     * @param bitmap The source bitmap to crop.
+     * @return A new circular bitmap, or null if the input was null.
+     */
     private Bitmap getCircleBitmap(Bitmap bitmap) {
 
         if (bitmap == null) {
@@ -436,6 +496,11 @@ public class FirebasexMessagingService extends FirebaseMessagingService {
         return output;
     }
 
+    /**
+     * Converts an HTML string to a {@link Spanned} for rich-text notification display.
+     * @param source The HTML string.
+     * @return The parsed Spanned, or null if source is null.
+     */
     private Spanned fromHtml(String source) {
         if (source != null)
             return Html.fromHtml(source);
@@ -443,6 +508,13 @@ public class FirebasexMessagingService extends FirebaseMessagingService {
             return null;
     }
 
+    /**
+     * Puts a key-value pair into a Bundle if the value is non-null and the key
+     * is not already present.
+     * @param k The key.
+     * @param v The value (skipped if null).
+     * @param b The target Bundle.
+     */
     private void putKVInBundle(String k, String v, Bundle b){
         if(v != null && !b.containsKey(k)){
             b.putString(k, v);

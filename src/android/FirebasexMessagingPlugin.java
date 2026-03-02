@@ -39,23 +39,37 @@ import java.util.List;
  */
 public class FirebasexMessagingPlugin extends CordovaPlugin {
 
+    /** Singleton instance of this plugin. */
     protected static FirebasexMessagingPlugin instance = null;
+    /** Log tag for this plugin. */
     protected static final String TAG = "FirebasexMessaging";
+    /** JavaScript global namespace prefix used for native-to-JS callbacks. */
     protected static final String JS_GLOBAL_NAMESPACE = "FirebasexMessaging.";
 
+    /** Android permission name for POST_NOTIFICATIONS (Android 13+). */
     protected static final String POST_NOTIFICATIONS = "POST_NOTIFICATIONS";
+    /** Request code used for the POST_NOTIFICATIONS runtime permission dialog. */
     protected static final int POST_NOTIFICATIONS_PERMISSION_REQUEST_ID = 1;
 
+    /** Whether incoming message payloads should be delivered immediately even when in background. */
     private static boolean immediateMessagePayloadDelivery = false;
+    /** Queue of notification bundles received while the JS callback was not yet registered. */
     private static ArrayList<Bundle> notificationStack = null;
+    /** Persistent callback context for delivering incoming messages to JavaScript. */
     private static CallbackContext notificationCallbackContext;
+    /** Persistent callback context for delivering FCM token refreshes to JavaScript. */
     private static CallbackContext tokenRefreshCallbackContext;
+    /** Callback context for the pending POST_NOTIFICATIONS permission request. */
     private static CallbackContext postNotificationPermissionRequestCallbackContext;
 
+    /** The default Android notification channel used for FCM notifications. */
     private static NotificationChannel defaultNotificationChannel = null;
+    /** Channel ID of the default notification channel. */
     public static String defaultChannelId = null;
+    /** Display name of the default notification channel. */
     public static String defaultChannelName = null;
 
+    /** Receiver for app lifecycle events (e.g. app becoming active) from FirebasexCore. */
     private BroadcastReceiver lifecycleReceiver;
 
     /**
@@ -65,6 +79,12 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         return instance;
     }
 
+    /**
+     * Initializes the plugin: registers the singleton instance, checks launch
+     * extras for notifications that opened the app, creates the default notification
+     * channel, and registers a lifecycle receiver to flush pending notifications
+     * when the app becomes active.
+     */
     @Override
     protected void pluginInitialize() {
         instance = this;
@@ -113,6 +133,12 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         }
     }
 
+    /**
+     * Routes Cordova action calls to the appropriate handler method.
+     * Handles 20+ actions; iOS-only actions (setBadgeNumber, getBadgeNumber,
+     * hasCriticalPermission, grantCriticalPermission, getAPNSToken,
+     * onApnsTokenReceived, onOpenSettings) are implemented as no-ops on Android.
+     */
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         try {
@@ -199,6 +225,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         }
     }
 
+    /**
+     * Handles new intents delivered when the activity is already running.
+     * Checks for notification data in the intent extras and delivers it.
+     */
     @Override
     public void onNewIntent(Intent intent) {
         try {
@@ -215,6 +245,7 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         }
     }
 
+    /** Unregisters the lifecycle receiver on plugin destruction. */
     @Override
     public void onDestroy() {
         if (lifecycleReceiver != null) {
@@ -225,6 +256,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     // ---- Token Management ----
 
+    /**
+     * Retrieves the current FCM registration token asynchronously.
+     * @param callbackContext Receives the token string on success.
+     */
     private void getToken(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -251,6 +286,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Registers a persistent callback for FCM token refresh events.
+     * Immediately attempts to fetch and return the current token.
+     * @param callbackContext Kept alive and called each time the token changes.
+     */
     private void onTokenRefresh(final CallbackContext callbackContext) {
         tokenRefreshCallbackContext = callbackContext;
 
@@ -283,6 +323,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Registers a persistent callback for incoming push messages.
+     * Immediately flushes any notifications queued before the callback was set.
+     * @param callbackContext Kept alive and called for each incoming message.
+     */
     private void onMessageReceived(final CallbackContext callbackContext) {
         notificationCallbackContext = callbackContext;
         sendPendingNotifications();
@@ -290,6 +335,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     // ---- Subscriptions ----
 
+    /**
+     * Subscribes to an FCM topic.
+     * @param callbackContext Called on completion.
+     * @param topic           The topic name.
+     */
     private void subscribe(final CallbackContext callbackContext, final String topic) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -303,6 +353,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Unsubscribes from an FCM topic.
+     * @param callbackContext Called on completion.
+     * @param topic           The topic name.
+     */
     private void unsubscribe(final CallbackContext callbackContext, final String topic) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -316,6 +371,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Deletes the current FCM token and optionally re-registers if auto-init is enabled.
+     * @param callbackContext Called on completion.
+     */
     private void unregister(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -335,6 +394,12 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     // ---- Permissions ----
 
+    /**
+     * Checks whether the app has notification permission.
+     * On Android 13+ checks POST_NOTIFICATIONS; on earlier versions checks
+     * whether notifications are enabled via NotificationManagerCompat.
+     * @param callbackContext Called with a boolean result.
+     */
     private void hasPermission(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -355,6 +420,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Requests the POST_NOTIFICATIONS runtime permission (Android 13+).
+     * On earlier versions, returns true immediately.
+     * @param callbackContext Called with a boolean indicating whether permission was granted.
+     */
     private void grantPermission(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -373,6 +443,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Callback for the system permission dialog result.
+     * Delivers the grant/deny result to the stored callback context.
+     */
     @Override
     public void onRequestPermissionResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == POST_NOTIFICATIONS_PERMISSION_REQUEST_ID && postNotificationPermissionRequestCallbackContext != null) {
@@ -385,6 +459,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     // ---- Auto-init ----
 
+    /**
+     * Checks whether FCM auto-init is enabled.
+     * @param callbackContext Called with a boolean result.
+     */
     private void isAutoInitEnabled(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -398,6 +476,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Enables or disables FCM auto-initialization.
+     * @param callbackContext Called on completion.
+     * @param enabled         {@code true} to enable, {@code false} to disable.
+     */
     private void setAutoInitEnabled(final CallbackContext callbackContext, final boolean enabled) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -413,6 +496,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     // ---- Notification Channels ----
 
+    /**
+     * Creates a notification channel (Cordova action handler).
+     * @param callbackContext Called on completion.
+     * @param options         JSON object with channel configuration.
+     */
     public void createChannel(final CallbackContext callbackContext, final JSONObject options) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -426,6 +514,18 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Creates or recreates a notification channel (Android O+).
+     * If a channel with the same ID already exists, it is deleted first.
+     * Handles all channel properties: name, importance, description, light,
+     * lightColor, visibility, badge, usage, streamType, sound ("default",
+     * "ringtone", custom resource, or "false" for silent), and vibration
+     * (boolean or long[] pattern).
+     *
+     * @param options JSON object with channel configuration properties.
+     * @return The created {@link NotificationChannel}, or null if below API 26.
+     * @throws JSONException if required properties are missing.
+     */
     protected static NotificationChannel createChannel(final JSONObject options) throws JSONException {
         NotificationChannel channel = null;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -524,6 +624,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         return channel;
     }
 
+    /**
+     * Creates the default notification channel using the configured default ID and name.
+     * @throws JSONException if channel creation fails.
+     */
     protected static void createDefaultChannel() throws JSONException {
         JSONObject options = new JSONObject();
         options.put("id", defaultChannelId);
@@ -531,10 +635,20 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         createDefaultChannel(options);
     }
 
+    /**
+     * Creates the default notification channel with custom options.
+     * @param options JSON object with channel configuration.
+     * @throws JSONException if channel creation fails.
+     */
     protected static void createDefaultChannel(final JSONObject options) throws JSONException {
         defaultNotificationChannel = createChannel(options);
     }
 
+    /**
+     * Sets the default notification channel, replacing any existing default.
+     * @param callbackContext Called on completion.
+     * @param options         JSON object with new channel configuration.
+     */
     public void setDefaultChannel(final CallbackContext callbackContext, final JSONObject options) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -559,6 +673,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Deletes a notification channel (Cordova action handler).
+     * @param callbackContext Called on completion.
+     * @param channelID       The channel ID to delete.
+     */
     public void deleteChannel(final CallbackContext callbackContext, final String channelID) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -572,6 +691,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Deletes a notification channel by its ID (Android O+).
+     * @param channelID The channel ID to delete.
+     */
     protected static void deleteChannel(final String channelID) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Context applicationContext = FirebasexCorePlugin.getInstance().getApplicationContext();
@@ -580,6 +703,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         }
     }
 
+    /**
+     * Lists all notification channels (Cordova action handler).
+     * Returns a JSON array of objects with "id" and "name" properties.
+     * @param callbackContext Called with the channels array.
+     */
     public void listChannels(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -602,6 +730,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         });
     }
 
+    /**
+     * Returns all registered notification channels (Android O+).
+     * @return List of notification channels, or null if below API 26.
+     */
     public static List<NotificationChannel> listChannels() {
         List<NotificationChannel> notificationChannels = null;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -612,6 +744,11 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
         return notificationChannels;
     }
 
+    /**
+     * Checks whether a notification channel with the given ID exists.
+     * @param channelId The channel ID to check.
+     * @return {@code true} if the channel exists.
+     */
     public static boolean channelExists(String channelId) {
         boolean exists = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -629,6 +766,10 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     // ---- Notifications ----
 
+    /**
+     * Cancels all displayed notifications from the notification shade.
+     * @param callbackContext Called on completion.
+     */
     public void clearAllNotifications(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -646,14 +787,27 @@ public class FirebasexMessagingPlugin extends CordovaPlugin {
 
     // ---- Static message delivery (called from FirebasexMessagingService) ----
 
+    /**
+     * Returns whether the application is currently in the background.
+     * @return {@code true} if the app is backgrounded.
+     */
     public static boolean inBackground() {
         return FirebasexCorePlugin.isApplicationInBackground();
     }
 
+    /**
+     * Returns whether a JS callback is registered for incoming notifications.
+     * @return {@code true} if the notification callback context is set.
+     */
     public static boolean hasNotificationsCallback() {
         return notificationCallbackContext != null;
     }
 
+    /**
+     * Returns whether immediate message payload delivery is enabled.
+     * When enabled, messages are delivered to the JS layer even when the app is in the background.
+     * @return {@code true} if immediate delivery is enabled.
+     */
     public static boolean isImmediateMessagePayloadDelivery() {
         return immediateMessagePayloadDelivery;
     }

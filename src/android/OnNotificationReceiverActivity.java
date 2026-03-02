@@ -7,10 +7,23 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
 
+/**
+ * Activity that handles notification taps on Android S+ (API 31+).
+ *
+ * <p>Starting with Android S, PendingIntents targeting BroadcastReceivers are restricted.
+ * This transparent Activity serves as the notification tap target instead of
+ * {@link OnNotificationOpenReceiver}. It extracts the message data from the intent,
+ * forwards it to {@link FirebasexMessagingPlugin#sendMessage(Bundle, Context)} for
+ * JS delivery, launches the app's main activity, and immediately finishes itself.</p>
+ *
+ * @see OnNotificationOpenReceiver
+ * @see FirebasexMessagingPlugin
+ */
 public class OnNotificationReceiverActivity extends Activity {
 
     private static final String TAG = "FirebasePlugin";
 
+    /** Handles notification data when the activity is first created. */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -19,6 +32,7 @@ public class OnNotificationReceiverActivity extends Activity {
         finish();
     }
 
+    /** Handles notification data when the activity receives a new intent while already running. */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -27,6 +41,12 @@ public class OnNotificationReceiverActivity extends Activity {
         finish();
     }
 
+    /**
+     * Extracts notification data from the intent, sets the tap source, delivers the
+     * message to the plugin, and launches the app's main activity.
+     * @param context The application context.
+     * @param intent  The intent containing notification extras.
+     */
     private static void handleNotification(Context context, Intent intent) {
         try{
             PackageManager pm = context.getPackageManager();

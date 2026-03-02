@@ -1,3 +1,12 @@
+/**
+ * @file FirebasexMessagingPlugin.m
+ * @brief Cordova plugin implementation for Firebase Cloud Messaging on iOS.
+ *
+ * Handles FCM token management, APNs token retrieval, push notification
+ * permissions (standard and critical alerts), topic subscriptions, badge
+ * control, auto-init configuration, actionable notifications from
+ * pn-actions.json, and message delivery queueing/forwarding to JavaScript.
+ */
 #import "FirebasexMessagingPlugin.h"
 #import "AppDelegate+FirebasexCore.h"
 #import "FirebasePluginMessageReceiverManager.h"
@@ -13,19 +22,31 @@
 @synthesize apnsTokenRefreshCallbackId;
 @synthesize notificationStack;
 
+/** Log tag prefix for this plugin. */
 static NSString *const LOG_TAG = @"FirebasexMessaging[native]";
+/** Maximum number of notifications that can be queued before the oldest is dropped. */
 static NSInteger const kNotificationStackSize = 32;
+/** Info.plist key controlling whether FCM is enabled. */
 static NSString *const FIREBASEX_IOS_FCM_ENABLED = @"FIREBASEX_IOS_FCM_ENABLED";
 
+/** Singleton instance of this plugin. */
 static FirebasexMessagingPlugin *messagingInstance;
+/** Whether the app has already registered for remote notifications. */
 static BOOL registeredForRemoteNotifications = NO;
+/** Whether an openSettings event was emitted before a callback was registered. */
 static BOOL openSettingsEmitted = NO;
+/** Whether incoming messages should be delivered to JS immediately even when backgrounded. */
 static BOOL immediateMessagePayloadDelivery = NO;
 
 + (FirebasexMessagingPlugin *)instance {
     return messagingInstance;
 }
 
+/**
+ * Initialises the plugin: stores the singleton instance, reads configuration
+ * flags, sets up actionable notification categories from pn-actions.json,
+ * registers for app lifecycle events, and checks notification permission.
+ */
 - (void)pluginInitialize {
     NSLog(@"Starting Firebase Messaging plugin");
     messagingInstance = self;
@@ -61,11 +82,21 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Called when the app becomes active; flushes any queued notifications. */
 - (void)onAppDidBecomeActive {
     [self sendPendingNotifications];
 }
 
-// Dynamic actions from pn-actions.json
+/**
+ * Reads pn-actions.json from the app bundle and registers actionable
+ * notification categories with UNUserNotificationCenter.
+ *
+ * Each action in the JSON can specify:
+ * - id: action identifier
+ * - title: localised button title
+ * - foreground: if true, launches the app when tapped
+ * - destructive: if true, shows the action in a destructive style
+ */
 - (void)setActionableNotifications {
     @try {
         if (!self.isFCMEnabled) {
@@ -118,6 +149,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Plugin API
 
+/** Retrieves the current FCM registration token. */
 - (void)getToken:(CDVInvokedUrlCommand *)command {
     [self _getToken:^(NSString *token, NSError *error) {
         [[FirebasexCorePlugin sharedInstance] handleStringResultWithPotentialError:error
@@ -126,6 +158,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }];
 }
 
+/**
+ * Internal helper that fetches the FCM token asynchronously.
+ * @param completeBlock Called with the token and any error.
+ */
 - (void)_getToken:(void (^)(NSString *token, NSError *error))completeBlock {
     @try {
         [[FIRMessaging messaging] tokenWithCompletion:^(NSString *token, NSError *error) {
@@ -140,12 +176,17 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Retrieves the APNs device token as a hex string. Returns null if unavailable. */
 - (void)getAPNSToken:(CDVInvokedUrlCommand *)command {
     CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
                                                       messageAsString:[self getAPNSToken]];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
+/**
+ * Returns the APNs device token as a hexadecimal string.
+ * @return The hex token string, or nil if no token is available.
+ */
 - (NSString *)getAPNSToken {
     NSString *hexToken = nil;
     NSData *apnsToken = [FIRMessaging messaging].APNSToken;
@@ -155,6 +196,11 @@ static BOOL immediateMessagePayloadDelivery = NO;
     return hexToken;
 }
 
+/**
+ * Converts raw NSData to a hexadecimal string representation.
+ * @param data The binary data to convert.
+ * @return A lowercase hex string, or nil if data is empty.
+ */
 - (NSString *)hexadecimalStringFromData:(NSData *)data {
     NSUInteger dataLength = data.length;
     if (dataLength == 0) return nil;
@@ -167,6 +213,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     return [hexString copy];
 }
 
+/**
+ * Registers a persistent callback for FCM token refresh events.
+ * Immediately fetches and returns the current token if an APNs token is available.
+ */
 - (void)onTokenRefresh:(CDVInvokedUrlCommand *)command {
     self.tokenRefreshCallbackId = command.callbackId;
     NSString *apnsToken = [self getAPNSToken];
@@ -179,6 +229,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Registers a persistent callback for APNs token events. Returns the current token immediately if available. */
 - (void)onApnsTokenReceived:(CDVInvokedUrlCommand *)command {
     self.apnsTokenRefreshCallbackId = command.callbackId;
     @try {
@@ -191,11 +242,17 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Registers a persistent callback for incoming push messages. Flushes any queued notifications immediately. */
 - (void)onMessageReceived:(CDVInvokedUrlCommand *)command {
     self.notificationCallbackId = command.callbackId;
     [self sendPendingNotifications];
 }
 
+/**
+ * Registers a callback for notification settings open events (iOS 12+).
+ * If an event was already emitted before this callback was registered,
+ * fires it immediately.
+ */
 - (void)onOpenSettings:(CDVInvokedUrlCommand *)command {
     @try {
         self.openSettingsCallbackId = command.callbackId;
@@ -211,6 +268,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Permissions
 
+/** Checks whether standard notification permission (alert) is granted. Also registers for remote notifications if permitted. */
 - (void)hasPermission:(CDVInvokedUrlCommand *)command {
     @try {
         [self _hasPermission:^(BOOL enabled) {
@@ -223,6 +281,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Internal helper that checks notification permission status.
+ * @param completeBlock Called with YES if alert notifications are enabled.
+ */
 - (void)_hasPermission:(void (^)(BOOL result))completeBlock {
     @try {
         [[UNUserNotificationCenter currentNotificationCenter]
@@ -244,6 +306,12 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Requests notification permission from the user.
+ * Returns an error if permission is already granted. On success, registers
+ * for remote notifications and passes the granted result to the callback.
+ * Accepts an optional first argument for ProvidesAppNotificationSettings (iOS 12+).
+ */
 - (void)grantPermission:(CDVInvokedUrlCommand *)command {
     NSLog(@"grantPermission");
     @try {
@@ -291,6 +359,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Checks whether critical alert permission is granted (iOS 12+). Returns NO on earlier iOS versions. */
 - (void)hasCriticalPermission:(CDVInvokedUrlCommand *)command {
     @try {
         [self _hasCriticalPermission:^(BOOL enabled) {
@@ -303,6 +372,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Internal helper that checks critical alert permission status (iOS 12+).
+ * @param completeBlock Called with YES if critical alerts are enabled.
+ */
 - (void)_hasCriticalPermission:(void (^)(BOOL result))completeBlock {
     @try {
         if (@available(iOS 12.0, *)) {
@@ -328,6 +401,11 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Requests critical alert permission (iOS 12+).
+ * Critical alerts can bypass Do Not Disturb and the ringer switch.
+ * Requires a special Apple entitlement. Returns false on earlier iOS versions.
+ */
 - (void)grantCriticalPermission:(CDVInvokedUrlCommand *)command {
     NSLog(@"grantCriticalPermission");
     @try {
@@ -369,6 +447,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Registers for remote notifications with APNs on the main thread.
+ * Only registers once per app session.
+ */
 - (void)registerForRemoteNotifications {
     NSLog(@"registerForRemoteNotifications");
     if (registeredForRemoteNotifications) return;
@@ -385,6 +467,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Subscriptions
 
+/** Subscribes to an FCM topic. Argument: topic name string. */
 - (void)subscribe:(CDVInvokedUrlCommand *)command {
     @try {
         NSString *topic = [NSString stringWithFormat:@"%@", [command.arguments objectAtIndex:0]];
@@ -399,6 +482,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Unsubscribes from an FCM topic. Argument: topic name string. */
 - (void)unsubscribe:(CDVInvokedUrlCommand *)command {
     @try {
         NSString *topic = [NSString stringWithFormat:@"%@", [command.arguments objectAtIndex:0]];
@@ -413,6 +497,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Deletes the current FCM token. If auto-init is enabled, a new token
+ * is automatically requested after deletion.
+ */
 - (void)unregister:(CDVInvokedUrlCommand *)command {
     @try {
         __block NSError *error = nil;
@@ -434,6 +522,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Auto-init
 
+/** Enables or disables FCM auto-initialization on the main thread. */
 - (void)setAutoInitEnabled:(CDVInvokedUrlCommand *)command {
     @try {
         bool enabled = [[command.arguments objectAtIndex:0] boolValue];
@@ -451,6 +540,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Returns whether FCM auto-init is enabled. Runs on the main thread. */
 - (void)isAutoInitEnabled:(CDVInvokedUrlCommand *)command {
     @try {
         [[FirebasexCorePlugin sharedInstance] runOnMainThread:^{
@@ -470,6 +560,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Badge
 
+/** Sets the app icon badge number. Runs on the main thread. */
 - (void)setBadgeNumber:(CDVInvokedUrlCommand *)command {
     @try {
         int number = [[command.arguments objectAtIndex:0] intValue];
@@ -487,6 +578,7 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/** Returns the current app icon badge number. Runs on the main thread. */
 - (void)getBadgeNumber:(CDVInvokedUrlCommand *)command {
     [[FirebasexCorePlugin sharedInstance] runOnMainThread:^{
         @try {
@@ -502,6 +594,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Notifications
 
+/**
+ * Clears all delivered notifications from Notification Center.
+ * Uses the badge number toggle trick (set to 1 then 0) to clear them.
+ */
 - (void)clearAllNotifications:(CDVInvokedUrlCommand *)command {
     [[FirebasexCorePlugin sharedInstance] runOnMainThread:^{
         @try {
@@ -517,21 +613,25 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Channels (iOS stubs)
 
+/** No-op stub for Android notification channel creation. Returns success immediately. */
 - (void)createChannel:(CDVInvokedUrlCommand *)command {
     CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
+/** No-op stub for Android default channel configuration. Returns success immediately. */
 - (void)setDefaultChannel:(CDVInvokedUrlCommand *)command {
     CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
+/** No-op stub for Android channel deletion. Returns success immediately. */
 - (void)deleteChannel:(CDVInvokedUrlCommand *)command {
     CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
+/** No-op stub for Android channel listing. Returns empty array. */
 - (void)listChannels:(CDVInvokedUrlCommand *)command {
     CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
                                                       messageAsArray:@[]];
@@ -540,6 +640,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
 
 #pragma mark - Message Delivery Internal
 
+/**
+ * Delivers all queued notifications from the notification stack to the
+ * JavaScript callback, then clears the stack.
+ */
 - (void)sendPendingNotifications {
     if (self.notificationCallbackId != nil && self.notificationStack != nil && [self.notificationStack count]) {
         @try {
@@ -553,6 +657,17 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Delivers a notification to the JavaScript callback.
+ *
+ * First offers the notification to any registered custom message receivers.
+ * If no receiver handles it and the JS callback is registered, sends the
+ * notification immediately (unless the app is backgrounded without
+ * immediate delivery enabled). Otherwise queues it on the notification stack.
+ * The stack is capped at {@code kNotificationStackSize} entries.
+ *
+ * @param userInfo The notification payload dictionary.
+ */
 - (void)sendNotification:(NSDictionary *)userInfo {
     @try {
         if ([FirebasePluginMessageReceiverManager sendNotification:userInfo]) {
@@ -579,6 +694,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Delivers an FCM token to the JavaScript token-refresh callback.
+ * @param token The FCM registration token string.
+ */
 - (void)sendToken:(NSString *)token {
     @try {
         if (self.tokenRefreshCallbackId != nil) {
@@ -591,6 +710,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Delivers an APNs token to the JavaScript APNs-token callback.
+ * @param token The APNs device token as a hex string.
+ */
 - (void)sendApnsToken:(NSString *)token {
     @try {
         if (self.apnsTokenRefreshCallbackId != nil) {
@@ -603,6 +726,10 @@ static BOOL immediateMessagePayloadDelivery = NO;
     }
 }
 
+/**
+ * Notifies JavaScript that the user opened notification settings.
+ * If no JS callback is registered yet, flags the event for deferred delivery.
+ */
 - (void)sendOpenNotificationSettings {
     @try {
         if (self.openSettingsCallbackId != nil) {
