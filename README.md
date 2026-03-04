@@ -1,9 +1,9 @@
-# cordova-plugin-firebasex-messaging [![Latest Stable Version](https://img.shields.io/npm/v/cordova-plugin-firebasex-messaging.svg)](https://www.npmjs.com/package/cordova-plugin-firebasex-messaging) [![Total Downloads](https://img.shields.io/npm/dt/cordova-plugin-firebasex-messaging.svg)](https://npm-stat.com/charts.html?package=cordova-plugin-firebasex-messaging)
+# cordova-plugin-firebasex-messaging [![Latest Stable Version](https://img.shields.io/npm/v/cordova-plugin-firebasex-messaging.svg)](https://www.npmjs.com/package/cordova-plugin-firebasex-messaging)
 
-Firebase Cloud Messaging (FCM) plugin for the modular FirebaseX Cordova plugin suite. Provides push notification support including token management, topic subscriptions, notification permissions, notification channels (Android), and data messages.
+Firebase Cloud Messaging (FCM) plugin for the [modular FirebaseX Cordova plugin suite](https://github.com/dpa99c/cordova-plugin-firebasex#modular-plugins). 
 
-This is part of the [modular FirebaseX Cordova plugin suite](https://github.com/dpa99c/cordova-plugin-firebasex#modular-plugins).
-Install only the modules you need for smaller app size and better build performance.
+This plugin wraps the [Firebase Cloud Messaging SDK](https://firebase.google.com/docs/cloud-messaging) and provides methods to receive and handle push notifications and data messages, manage FCM tokens, subscribe to topics, and control FCM behaviour in your Cordova app.
+
 
 Supported platforms: Android and iOS
 
