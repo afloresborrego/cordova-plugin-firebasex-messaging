@@ -75,6 +75,7 @@ The following plugin variables can be set at installation time using the `--vari
 
 | Variable | Default | Description |
 |---|---|---|
+| `ANDROID_FIREBASE_MESSAGING_VERSION` | `25.0.0` | Android Firebase Messaging SDK version. |
 | `FIREBASE_FCM_AUTOINIT_ENABLED` | `true` | Whether to auto-initialize FCM on app startup. Set to `false` to enable user opt-in for push notifications. |
 | `FIREBASE_MESSAGING_IMMEDIATE_PAYLOAD_DELIVERY` | `false` | Whether to attempt immediate delivery of message payloads when the app is in background/inactive. See [Android background notifications](#android-background-notifications) and [iOS background notifications](#ios-background-notifications). |
 | `IOS_FCM_ENABLED` | `true` | Whether to enable FCM on iOS. |
