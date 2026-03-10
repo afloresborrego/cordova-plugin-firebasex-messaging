@@ -9,6 +9,7 @@
  */
 #import "FirebasexMessagingPlugin.h"
 #import "AppDelegate+FirebasexCore.h"
+#import "AppDelegate+FirebasexMessaging.h"
 #import "FirebasePluginMessageReceiverManager.h"
 #import <Cordova/CDV.h>
 @import FirebaseMessaging;

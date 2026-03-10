@@ -316,7 +316,13 @@ static NSDictionary *mutableUserInfo;
                 hasAlert ? @"YES" : @"NO", hasBadge ? @"YES" : @"NO", hasSound ? @"YES" : @"NO"]];
 
             UNNotificationPresentationOptions options = 0;
-            if (hasAlert) options |= UNNotificationPresentationOptionAlert;
+            if (hasAlert) {
+                if (@available(iOS 14.0, *)) {
+                    options |= UNNotificationPresentationOptionList | UNNotificationPresentationOptionBanner;
+                } else {
+                    options |= UNNotificationPresentationOptionAlert;
+                }
+            }
             if (hasBadge) options |= UNNotificationPresentationOptionBadge;
             if (hasSound) options |= UNNotificationPresentationOptionSound;
             if (options > 0) completionHandler(options);

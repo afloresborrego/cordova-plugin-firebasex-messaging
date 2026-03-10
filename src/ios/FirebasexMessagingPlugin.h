@@ -51,8 +51,14 @@
 
 /** Retrieves the current FCM registration token. */
 - (void)getToken:(CDVInvokedUrlCommand *)command;
-/** Retrieves the APNs device token as a hex string. */
+/** Retrieves the APNs device token as a hex string. Cordova API entry point. */
 - (void)getAPNSToken:(CDVInvokedUrlCommand *)command;
+/**
+ * Returns the APNs device token as a hexadecimal string.
+ *
+ * @return The hex token string, or @c nil if no APNs token is available yet.
+ */
+- (nullable NSString *)getAPNSToken;
 /** Registers a persistent callback for FCM token refresh events. */
 - (void)onTokenRefresh:(CDVInvokedUrlCommand *)command;
 /** Registers a persistent callback for APNs token events. */
