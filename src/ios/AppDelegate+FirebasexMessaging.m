@@ -309,9 +309,8 @@ static NSDictionary *mutableUserInfo;
         bool hasAlert = [aps objectForKey:@"alert"] != nil;
         bool hasBadge = [aps objectForKey:@"badge"] != nil;
         bool hasSound = [aps objectForKey:@"sound"] != nil;
-        bool isContentAvailable = [self firebasexMessagingIsContentAvailable:mutableInfo];
 
-        if (showForegroundNotification && isContentAvailable) {
+        if (showForegroundNotification) {
             [[FirebasexCorePlugin sharedInstance] _logMessage:[NSString stringWithFormat:@"willPresentNotification: foreground notification alert=%@, badge=%@, sound=%@",
                 hasAlert ? @"YES" : @"NO", hasBadge ? @"YES" : @"NO", hasSound ? @"YES" : @"NO"]];
 
