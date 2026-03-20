@@ -368,12 +368,12 @@ You can also reference these icons in [data messages](#android-data-messages), f
 ### Android Notification Color
 
 On Android Lollipop (5.0/API 21) and above you can set the default accent color for the notification by adding a color setting.
-This is defined as an [ARGB colour](<https://en.wikipedia.org/wiki/RGBA_color_space#ARGB_(word-order)>) which the plugin sets by default to `#FF00FFFF` (cyan).
+This is defined as an [ARGB colour](<https://en.wikipedia.org/wiki/RGBA_color_space#ARGB_(word-order)>) which the plugin sets by default to `#FFFFFF` (white).
 Note: On Android 7 and above, the accent color can only be set for the notification displayed in the system tray area - the icon in the statusbar is always white.
 
-You can override this default by specifying a value using the `ANDROID_ICON_ACCENT` plugin variable during plugin installation of `cordova-plugin-firebasex-core`, for example:
+You can override this default by specifying a value using the `ANDROID_ICON_ACCENT` plugin variable during plugin installation of `cordova-plugin-firebasex-messaging`, for example:
 
-    cordova plugin add cordova-plugin-firebasex-core --variable ANDROID_ICON_ACCENT=#FF123456
+    cordova plugin add cordova-plugin-firebasex-messaging --variable ANDROID_ICON_ACCENT=#FF123456
 
 You can override the default color accent by specifying the `colour` key as an RGB value in a notification message, e.g.:
 

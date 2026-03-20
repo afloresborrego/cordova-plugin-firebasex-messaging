@@ -66,6 +66,7 @@
         <source-file src="src/android/OnNotificationOpenReceiver.java" target-dir="src/org/apache/cordova/firebasex/" />
         <source-file src="src/android/OnNotificationReceiverActivity.java" target-dir="src/org/apache/cordova/firebasex/" />
 
+        <preference name="ANDROID_ICON_ACCENT" default="#FFFFFF" />
         <preference name="ANDROID_FIREBASE_MESSAGING_VERSION" default="25.0.1" />
 
         <framework src="com.google.firebase:firebase-messaging:$ANDROID_FIREBASE_MESSAGING_VERSION" />
@@ -120,4 +121,6 @@
 
         <hook type="after_plugin_install" src="scripts/ios/after_plugin_install.js" />
     </platform>
+
+    <hook src="scripts/after_prepare.js" type="after_prepare"/>
 </plugin>
